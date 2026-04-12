@@ -147,6 +147,7 @@ extension TextViewController {
             self.gutterView.frame.origin.y = self.textView.frame.origin.y - self.scrollView.contentInsets.top
             self.gutterView.needsDisplay = true
             self.gutterView.foldingRibbon.needsDisplay = true
+            self.gutterView.gitChangeIndicator.needsDisplay = true
             self.reformattingGuideView?.updatePosition(in: self)
             self.scrollView.needsLayout = true
         }
@@ -165,7 +166,7 @@ extension TextViewController {
 
     func setUpAppearanceChangedObserver() {
         NSApp.publisher(for: \.effectiveAppearance)
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] newValue in
                 guard let self = self else { return }
 

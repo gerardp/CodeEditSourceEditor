@@ -35,7 +35,7 @@ public class TextViewController: NSViewController {
     var reformattingGuideView: ReformattingGuideView!
 
     /// Middleman between the text view to our invisible characters config, with knowledge of things like the
-    ///  /// user's theme and indent option to help correctly draw invisible character placeholders.
+    /// user's theme and indent option to help correctly draw invisible character placeholders.
     var invisibleCharactersCoordinator: InvisibleCharactersCoordinator
 
     var minimapXConstraint: NSLayoutConstraint?
@@ -196,6 +196,14 @@ public class TextViewController: NSViewController {
     }
 
     var foldProvider: LineFoldProvider
+
+    /// The current git change indicators to display in the gutter.
+    /// Set this from the host app when dirty diff data changes.
+    public var gutterChanges: [GutterChange] = [] {
+        didSet {
+            gutterView?.gitChangeIndicator.changes = gutterChanges
+        }
+    }
 
     /// Filters used when applying edits..
     var textFilters: [TextFormation.Filter] = []

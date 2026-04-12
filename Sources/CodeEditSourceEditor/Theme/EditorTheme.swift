@@ -42,6 +42,15 @@ public struct EditorTheme: Equatable {
     public var characters: Attribute
     public var comments: Attribute
 
+    // MARK: - Gutter Change Indicator Colors
+
+    /// The color for "added" change indicators in the gutter.
+    public var gutterAddedColor: NSColor
+    /// The color for "modified" change indicators in the gutter.
+    public var gutterModifiedColor: NSColor
+    /// The color for "deleted" change indicators in the gutter.
+    public var gutterDeletedColor: NSColor
+
     public init(
         text: Attribute,
         insertionPoint: NSColor,
@@ -58,7 +67,10 @@ public struct EditorTheme: Equatable {
         numbers: Attribute,
         strings: Attribute,
         characters: Attribute,
-        comments: Attribute
+        comments: Attribute,
+        gutterAddedColor: NSColor? = nil,
+        gutterModifiedColor: NSColor? = nil,
+        gutterDeletedColor: NSColor? = nil
     ) {
         self.text = text
         self.insertionPoint = insertionPoint
@@ -76,6 +88,11 @@ public struct EditorTheme: Equatable {
         self.strings = strings
         self.characters = characters
         self.comments = comments
+
+        // Default gutter colors
+        self.gutterAddedColor = gutterAddedColor ?? NSColor(srgbRed: 0.267, green: 0.690, blue: 0.345, alpha: 1.0)
+        self.gutterModifiedColor = gutterModifiedColor ?? NSColor(srgbRed: 0.196, green: 0.533, blue: 0.886, alpha: 1.0)
+        self.gutterDeletedColor = gutterDeletedColor ?? NSColor(srgbRed: 0.196, green: 0.533, blue: 0.886, alpha: 1.0)
     }
 
     /// Maps a capture type to the attributes for that capture determined by the theme.

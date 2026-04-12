@@ -168,6 +168,10 @@ extension SourceEditorConfiguration {
                 .windowBackgroundColor
             }
 
+            controller.gutterView.gitChangeIndicator.addedColor = theme.gutterAddedColor
+            controller.gutterView.gitChangeIndicator.modifiedColor = theme.gutterModifiedColor
+            controller.gutterView.gitChangeIndicator.deletedColor = theme.gutterDeletedColor
+
             controller.minimapView.setTheme(theme)
             controller.reformattingGuideView?.theme = theme
             controller.textView.typingAttributes = controller.attributesFor(nil)

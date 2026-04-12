@@ -52,7 +52,7 @@ public class GutterView: NSView {
     }
 
     @Invalidating(.display)
-    var edgeInsets: EdgeInsets = EdgeInsets(leading: 20, trailing: 12)
+    var edgeInsets: EdgeInsets = EdgeInsets(leading: 0, trailing: 12)
 
     @Invalidating(.display)
     var backgroundEdgeInsets: EdgeInsets = EdgeInsets(leading: 0, trailing: 8)
@@ -81,6 +81,14 @@ public class GutterView: NSView {
         }
     }
 
+    /// Toggle the visibility of the git change indicators in the gutter.
+    @Invalidating(.display)
+    public var showGitChangeIndicators: Bool = true {
+        didSet {
+            gitChangeIndicator.isHidden = !showGitChangeIndicators
+        }
+    }
+
     private weak var textView: TextView?
     private weak var delegate: GutterViewDelegate?
     private var maxLineNumberWidth: CGFloat = 0
@@ -103,6 +111,18 @@ public class GutterView: NSView {
     /// The view that draws the fold decoration in the gutter.
     var foldingRibbon: LineFoldRibbonView
 
+    /// The view that draws git change indicators (blue/green bars) in the gutter.
+    var gitChangeIndicator: GitChangeIndicatorView
+
+    /// Syntax helper for determining the required space for the git change indicator.
+    private var gitChangeIndicatorWidth: CGFloat {
+        if gitChangeIndicator.isHidden {
+            0.0
+        } else {
+            GitChangeIndicatorView.totalWidth
+        }
+    }
+
     /// Syntax helper for determining the required space for the folding ribbon.
     private var foldingRibbonWidth: CGFloat {
         if foldingRibbon.isHidden {
@@ -117,13 +137,23 @@ public class GutterView: NSView {
         true
     }
 
-    /// We override this variable so we can update the ``foldingRibbon``'s frame to match the gutter.
+    /// We override this variable so we can update subview frames to match the gutter.
     override public var frame: NSRect {
         get {
             super.frame
         }
         set {
             super.frame = newValue
+
+            // Git change indicator sits in its own narrow column at the leading edge.
+            gitChangeIndicator.frame = NSRect(
+                x: 0,
+                y: 0.0,
+                width: gitChangeIndicator.isHidden ? 0 : GitChangeIndicatorView.totalWidth,
+                height: newValue.height
+            )
+
+            // Folding ribbon is positioned at the trailing edge
             foldingRibbon.frame = NSRect(
                 x: newValue.width - edgeInsets.trailing - foldingRibbonWidth + foldingRibbonPadding,
                 y: 0.0,
@@ -161,6 +191,7 @@ public class GutterView: NSView {
         self.delegate = delegate
 
         foldingRibbon = LineFoldRibbonView(controller: controller)
+        gitChangeIndicator = GitChangeIndicatorView(textView: controller.textView)
 
         super.init(frame: .zero)
         clipsToBounds = true
@@ -169,6 +200,7 @@ public class GutterView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         layer?.masksToBounds = true
 
+        addSubview(gitChangeIndicator)
         addSubview(foldingRibbon)
 
         NotificationCenter.default.addObserver(
@@ -204,7 +236,7 @@ public class GutterView: NSView {
             maxLineLength = lineStorageDigits
         }
 
-        let newWidth = maxLineNumberWidth + edgeInsets.horizontal + foldingRibbonWidth
+        let newWidth = gitChangeIndicatorWidth + maxLineNumberWidth + edgeInsets.horizontal + foldingRibbonWidth
         if frame.size.width != newWidth {
             frame.size.width = newWidth
             delegate?.gutterViewWidthDidUpdate()
@@ -242,8 +274,10 @@ public class GutterView: NSView {
         var highlightedLines: Set<UUID> = []
         context.setFillColor(selectedLineColor.cgColor)
 
-        let xPos = backgroundEdgeInsets.leading
-        let width = frame.width - backgroundEdgeInsets.trailing
+        // Line highlight starts after the git change indicator column, with a rounded leading edge
+        let highlightLeading = gitChangeIndicatorWidth + backgroundEdgeInsets.leading
+        let highlightWidth = frame.width - highlightLeading - backgroundEdgeInsets.trailing
+        let cornerRadius: CGFloat = 4.0
 
         for selection in selectionManager.textSelections where selection.range.isEmpty {
             guard let line = textView.layoutManager.textLineForOffset(selection.range.location),
@@ -252,14 +286,37 @@ public class GutterView: NSView {
                 continue
             }
             highlightedLines.insert(line.data.id)
-            context.fill(
-                CGRect(
-                    x: xPos,
-                    y: line.yPos,
-                    width: width,
-                    height: line.height
-                ).pixelAligned
+            let rect = CGRect(
+                x: highlightLeading,
+                y: line.yPos,
+                width: highlightWidth,
+                height: line.height
+            ).pixelAligned
+
+            // Round only the leading (left) corners
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: rect.minX + cornerRadius, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
+            path.addArc(
+                center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
+                radius: cornerRadius,
+                startAngle: .pi / 2,
+                endAngle: .pi,
+                clockwise: false
             )
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cornerRadius))
+            path.addArc(
+                center: CGPoint(x: rect.minX + cornerRadius, y: rect.minY + cornerRadius),
+                radius: cornerRadius,
+                startAngle: .pi,
+                endAngle: 3 * .pi / 2,
+                clockwise: false
+            )
+            path.closeSubpath()
+            context.addPath(path)
+            context.fillPath()
         }
 
         context.restoreGState()
@@ -314,8 +371,8 @@ public class GutterView: NSView {
             let fontHeightDifference = ((fragment?.height ?? 0) - fontLineHeight) / 4
 
             let yPos = linePosition.yPos + ascent + (fragment?.heightDifference ?? 0)/2 + fontHeightDifference
-            // Leading padding + (width - linewidth)
-            let xPos = edgeInsets.leading + (maxLineNumberWidth - lineNumberWidth)
+            // Leading padding + git indicator width + (width - linewidth)
+            let xPos = gitChangeIndicatorWidth + edgeInsets.leading + (maxLineNumberWidth - lineNumberWidth)
 
             ContextSetHiddenSmoothingStyle(context, 16)
 

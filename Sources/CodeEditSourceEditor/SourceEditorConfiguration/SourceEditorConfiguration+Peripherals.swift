@@ -28,13 +28,17 @@ extension SourceEditorConfiguration {
         /// non-standard quote character: `“ (0x201C)`.
         public var warningCharacters: Set<UInt16>
 
+        /// Whether to show git change indicators in the gutter.
+        public var showGitChangeIndicators: Bool
+
         public init(
             showGutter: Bool = true,
             showMinimap: Bool = true,
             showReformattingGuide: Bool = false,
             showFoldingRibbon: Bool = true,
             invisibleCharactersConfiguration: InvisibleCharactersConfiguration = .empty,
-            warningCharacters: Set<UInt16> = []
+            warningCharacters: Set<UInt16> = [],
+            showGitChangeIndicators: Bool = true
         ) {
             self.showGutter = showGutter
             self.showMinimap = showMinimap
@@ -42,6 +46,7 @@ extension SourceEditorConfiguration {
             self.showFoldingRibbon = showFoldingRibbon
             self.invisibleCharactersConfiguration = invisibleCharactersConfiguration
             self.warningCharacters = warningCharacters
+            self.showGitChangeIndicators = showGitChangeIndicators
         }
 
         @MainActor
@@ -65,6 +70,10 @@ extension SourceEditorConfiguration {
 
             if oldConfig?.showFoldingRibbon != showFoldingRibbon {
                 controller.gutterView.showFoldingRibbon = showFoldingRibbon
+            }
+
+            if oldConfig?.showGitChangeIndicators != showGitChangeIndicators {
+                controller.gutterView.showGitChangeIndicators = showGitChangeIndicators
             }
 
             if oldConfig?.invisibleCharactersConfiguration != invisibleCharactersConfiguration {
