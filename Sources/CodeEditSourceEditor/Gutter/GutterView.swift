@@ -153,9 +153,9 @@ public class GutterView: NSView {
                 height: newValue.height
             )
 
-            // Folding ribbon is positioned at the trailing edge
+            // Folding ribbon is positioned at the trailing edge, after the glyph margin
             foldingRibbon.frame = NSRect(
-                x: newValue.width - edgeInsets.trailing - foldingRibbonWidth + foldingRibbonPadding,
+                x: newValue.width - foldingRibbonWidth,
                 y: 0.0,
                 width: foldingRibbonWidth,
                 height: newValue.height
@@ -236,7 +236,8 @@ public class GutterView: NSView {
             maxLineLength = lineStorageDigits
         }
 
-        let newWidth = gitChangeIndicatorWidth + maxLineNumberWidth + edgeInsets.horizontal + foldingRibbonWidth
+        let newWidth = gitChangeIndicatorWidth + maxLineNumberWidth + edgeInsets.horizontal
+            + foldingRibbonWidth
         if frame.size.width != newWidth {
             frame.size.width = newWidth
             delegate?.gutterViewWidthDidUpdate()
@@ -272,12 +273,13 @@ public class GutterView: NSView {
         context.saveGState()
 
         var highlightedLines: Set<UUID> = []
-        context.setFillColor(selectedLineColor.cgColor)
 
         // Line highlight starts after the git change indicator column, with a rounded leading edge
         let highlightLeading = gitChangeIndicatorWidth + backgroundEdgeInsets.leading
         let highlightWidth = frame.width - highlightLeading - backgroundEdgeInsets.trailing
-        let cornerRadius: CGFloat = 4.0
+
+        let viewZones = textView.layoutManager.viewZones
+        let hasViewZones = !viewZones.zones.isEmpty
 
         for selection in selectionManager.textSelections where selection.range.isEmpty {
             guard let line = textView.layoutManager.textLineForOffset(selection.range.location),
@@ -286,37 +288,23 @@ public class GutterView: NSView {
                 continue
             }
             highlightedLines.insert(line.data.id)
+            // Line storage Y doesn't include view zone whitespace; the text view layout adds it in to get the
+            // visible Y. The gutter renders alongside the text, so it must add the same offset — otherwise gutter
+            // highlights snap to the zero-zone position while the text view is mid-animation.
+            let whitespaceOffset = hasViewZones ? viewZones.whitespaceHeightBeforeLine(line.index) : 0
             let rect = CGRect(
                 x: highlightLeading,
-                y: line.yPos,
+                y: line.yPos + whitespaceOffset,
                 width: highlightWidth,
                 height: line.height
             ).pixelAligned
 
-            // Round only the leading (left) corners
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: rect.minX + cornerRadius, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
-            path.addArc(
-                center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
-                radius: cornerRadius,
-                startAngle: .pi / 2,
-                endAngle: .pi,
-                clockwise: false
+            // Round only the leading (left) corners — the text view draws the right side
+            LineHighlightDrawing.fillLeadingRoundedRect(
+                rect,
+                color: selectedLineColor.cgColor,
+                in: context
             )
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cornerRadius))
-            path.addArc(
-                center: CGPoint(x: rect.minX + cornerRadius, y: rect.minY + cornerRadius),
-                radius: cornerRadius,
-                startAngle: .pi,
-                endAngle: 3 * .pi / 2,
-                clockwise: false
-            )
-            path.closeSubpath()
-            context.addPath(path)
-            context.fillPath()
         }
 
         context.restoreGState()
@@ -352,8 +340,16 @@ public class GutterView: NSView {
         context.saveGState()
         context.clip(to: dirtyRect)
 
+        let viewZones = textView.layoutManager.viewZones
+        let hasViewZones = !viewZones.zones.isEmpty
+        // Line storage Y doesn't include zone whitespace, so we have to widen the query to cover any line whose
+        // `documentY = storedY + whitespaceBefore(index)` could land inside dirtyRect. Subtracting the total
+        // whitespace is a conservative lower bound; the per-line visibility check happens via the dirtyRect clip.
+        let queryMinY = hasViewZones ? max(0, dirtyRect.minY - viewZones.totalHeight) : dirtyRect.minY
+        let queryMaxY = dirtyRect.maxY
+
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        for linePosition in textView.layoutManager.linesStartingAt(dirtyRect.minY, until: dirtyRect.maxY) {
+        for linePosition in textView.layoutManager.linesStartingAt(queryMinY, until: queryMaxY) {
             let isSelected = selectionRangeMap.intersects(integersIn: linePosition.range)
                 || linePosition.data.id == eofLineID
             if isSelected {
@@ -370,7 +366,12 @@ public class GutterView: NSView {
             let lineNumberWidth = CTLineGetTypographicBounds(ctLine, &ascent, nil, nil)
             let fontHeightDifference = ((fragment?.height ?? 0) - fontLineHeight) / 4
 
-            let yPos = linePosition.yPos + ascent + (fragment?.heightDifference ?? 0)/2 + fontHeightDifference
+            // Add view zone whitespace so line numbers animate with the text when a zone shrinks/grows mid-fold.
+            let whitespaceOffset = hasViewZones
+                ? viewZones.whitespaceHeightBeforeLine(linePosition.index)
+                : 0
+            let fragmentHeightDifference = (fragment?.heightDifference ?? 0)/2
+            let yPos = linePosition.yPos + whitespaceOffset + ascent + fragmentHeightDifference + fontHeightDifference
             // Leading padding + git indicator width + (width - linewidth)
             let xPos = gitChangeIndicatorWidth + edgeInsets.leading + (maxLineNumberWidth - lineNumberWidth)
 

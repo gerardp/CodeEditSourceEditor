@@ -19,9 +19,17 @@ extension LineFoldRibbonView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext,
-              let layoutManager = model?.controller?.textView.layoutManager,
-              // Find the visible lines in the rect AppKit is asking us to draw.
-              let rangeStart = layoutManager.textLineForPosition(dirtyRect.minY),
+              let layoutManager = model?.controller?.textView.layoutManager else {
+            return
+        }
+
+        // Line storage Y doesn't include view zone whitespace. Widen the query range so we
+        // catch lines whose visible Y (storageY + whitespace) lands inside dirtyRect.
+        let viewZones = layoutManager.viewZones
+        let hasViewZones = !viewZones.zones.isEmpty
+        let queryMinY = hasViewZones ? max(0, dirtyRect.minY - viewZones.totalHeight) : dirtyRect.minY
+
+        guard let rangeStart = layoutManager.textLineForPosition(queryMinY),
               let rangeEnd = layoutManager.textLineForPosition(dirtyRect.maxY) else {
             return
         }
@@ -122,8 +130,17 @@ extension LineFoldRibbonView {
         in context: CGContext,
         using layoutManager: TextLayoutManager
     ) {
-        let minYPosition = foldInfo.startLine.yPos
-        let maxYPosition = foldInfo.endLine.yPos + foldInfo.endLine.height
+        // Add view zone whitespace so fold ribbons slide in lockstep with line numbers
+        // and text content when a zone shrinks/grows during a fold animation.
+        let viewZones = layoutManager.viewZones
+        let hasViewZones = !viewZones.zones.isEmpty
+        let startWhitespace = hasViewZones
+            ? viewZones.whitespaceHeightBeforeLine(foldInfo.startLine.index) : 0
+        let endWhitespace = hasViewZones
+            ? viewZones.whitespaceHeightBeforeLine(foldInfo.endLine.index) : 0
+
+        let minYPosition = foldInfo.startLine.yPos + startWhitespace
+        let maxYPosition = foldInfo.endLine.yPos + endWhitespace + foldInfo.endLine.height
         let foldRect = NSRect(x: 0, y: minYPosition + 1, width: 7, height: maxYPosition - minYPosition - 2)
 
         if foldInfo.fold.isCollapsed {

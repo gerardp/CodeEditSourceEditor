@@ -30,7 +30,7 @@ public struct CursorPosition: Sendable, Codable, Equatable, Hashable {
             self.column = column
         }
 
-        var isPositive: Bool { line > 0 && column > 0 }
+        public var isPositive: Bool { line > 0 && column > 0 }
     }
 
     /// Initialize a cursor position.

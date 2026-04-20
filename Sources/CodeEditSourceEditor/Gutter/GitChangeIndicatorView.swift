@@ -150,14 +150,20 @@ public final class GitChangeIndicatorView: NSView {
               let textView else { return }
 
         context.saveGState()
-        context.clip(to: dirtyRect)
+
+        // Widen the dirty rect to account for view zone whitespace that pushes indicators downward
+        // during fold animations. Without this, bars offset by a view zone may be outside the original
+        // dirty rect and get clipped away.
+        let totalZoneHeight = textView.layoutManager?.viewZones.totalHeight ?? 0
+        let widened = dirtyRect.insetBy(dx: 0, dy: -totalZoneHeight)
+        context.clip(to: widened)
 
         // Center the bar horizontally within the indicator column.
         let centerX = frame.width / 2.0
 
         for change in changes {
             let barInfo = barRect(for: change, centerX: centerX, textView: textView)
-            guard let barInfo, barInfo.rect.intersects(dirtyRect) else { continue }
+            guard let barInfo, barInfo.rect.intersects(widened) else { continue }
 
             let isHovered = hoverChange == change
             let progress = isHovered ? hoverProgress : 0.0
@@ -220,8 +226,17 @@ public final class GitChangeIndicatorView: NSView {
             return nil
         }
 
-        let topY = firstLine.yPos
-        let bottomY = lastLine.yPos + lastLine.height
+        // Add view zone whitespace so git indicators slide in lockstep with line numbers
+        // and text content when a zone shrinks/grows during a fold animation.
+        let viewZones = textView.layoutManager.viewZones
+        let hasViewZones = !viewZones.zones.isEmpty
+        let firstWhitespace = hasViewZones
+            ? viewZones.whitespaceHeightBeforeLine(firstLineIndex) : 0
+        let lastWhitespace = hasViewZones
+            ? viewZones.whitespaceHeightBeforeLine(lastLineIndex) : 0
+
+        let topY = firstLine.yPos + firstWhitespace
+        let bottomY = lastLine.yPos + lastWhitespace + lastLine.height
 
         let barW: CGFloat
         switch change.type {
@@ -329,9 +344,9 @@ public final class GitChangeIndicatorView: NSView {
         let centerX = frame.width / 2.0
         guard let barInfo = barRect(for: change, centerX: centerX, textView: textView) else { return }
 
-        let topY = barInfo.rect.minY - 0.5
-        let bottomY = barInfo.rect.maxY + 0.5
         let ruleThickness: CGFloat = 1.0
+        let topY = barInfo.rect.minY - (ruleThickness / 2.0)
+        let bottomY = barInfo.rect.maxY + (ruleThickness / 2.0)
         let color: NSColor
         switch change.type {
         case .added:             color = addedColor
